@@ -35,7 +35,7 @@
     box-shadow: 0 8px 30px rgba(0,0,0,0.4);
   }
   video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-  #arVideo, #arCanvas { transform: scaleX(-1); }
+  #arVideo, #arCanvas { transform: scaleX(-1); object-fit: cover; }
   #status {
     position: absolute; bottom: 10px; left: 10px;
     background: rgba(0,0,0,0.55); padding: 6px 10px; border-radius: 8px;
@@ -339,11 +339,19 @@ async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
     arVideo.srcObject = stream;
     await arVideo.play();
-    const w = arVideo.videoWidth || 640, h = arVideo.videoHeight || 480;
-    arCanvas.width = w; arCanvas.height = h;
-    arRenderer.setSize(w, h, false);
+    function syncCanvasToStage() {
+      const rect = arCanvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = Math.round(rect.width * dpr), h = Math.round(rect.height * dpr);
+      arCanvas.width = w; arCanvas.height = h;
+      arRenderer.setSize(w, h, false);
+      if (arCam) { arCam.aspect = w / h; arCam.updateProjectionMatrix(); }
+      return { w, h };
+    }
+    const { w, h } = syncCanvasToStage();
     arCam = new THREE.PerspectiveCamera(HEAD_VERTICAL_FOV_DEG, w / h, 0.01, 100000);
     arCam.position.set(0, 0, 0);
+    window.addEventListener('resize', syncCanvasToStage);
     running = true;
     statusEl.textContent = 'Detectando rostro…';
     loopAR();
