@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Gufo Gafas — Probador Virtual</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: #14161a;
+    color: #f2f2f2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+  }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  h2 { font-size: 15px; margin: 0 0 16px; color: #e8501f; font-weight: 600; }
+  .stage {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    aspect-ratio: 4 / 3;
+    background: #1c1e22;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  }
+  video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
+  #status {
+    position: absolute; bottom: 10px; left: 10px;
+    background: rgba(0,0,0,0.55); padding: 6px 10px; border-radius: 8px;
+    font-size: 12px; color: #ddd;
+  }
+  .controls { margin-top: 18px; }
+  button.ctrl {
+    background: #e8501f; color: white; border: none; padding: 12px 26px;
+    border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  button.ctrl.stop { background: #2a2d33; }
+  #errBox {
+    display: none; margin-top: 16px; background: #3a1f1f; border: 1px solid #7a3b3b;
+    padding: 12px 14px; border-radius: 10px; font-size: 13px; max-width: 560px; line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+
+<h1>👓 Gufo Gafas — Probador Virtual</h1>
+<h2>Acetato ovalado (Miu Miu)</h2>
+
+<div class="stage">
+  <video id="arVideo" autoplay playsinline muted></video>
+  <canvas id="arCanvas"></canvas>
+  <div id="status">Cargando modelo…</div>
+</div>
+
+<div class="controls">
+  <button class="ctrl" id="startCamBtn">Activar cámara</button>
+  <button class="ctrl stop" id="stopCamBtn" style="display:none;">Detener</button>
+</div>
+
+<div id="errBox"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
+// ---------- valores calibrados para este armazón (Acetato ovalado - Miu Miu) ----------
+const MODEL_URL = "https://raw.githubusercontent.com/gufogafas-ui/gufo-probador/main/round_glasses_3d_model.glb";
+const ALIGN = { rotX: 0, rotY: 0, rotZ: 0, scale: 1, offsetY: 0 };
+const FINE = { scale: 14.420993610649951, offsetX: 0.05000000000000002, offsetY: 0.49999999999999994, offsetZ: -1.7500000000000009 };
+const HEAD_VERTICAL_FOV_DEG = 63;
+
+window.addEventListener('error', (e) => showError('Error en la página: ' + e.message));
+function showError(msg) {
+  const box = document.getElementById('errBox');
+  box.style.display = 'block';
+  box.innerHTML = msg;
+}
+
+const arVideo = document.getElementById('arVideo');
+const arCanvas = document.getElementById('arCanvas');
+const statusEl = document.getElementById('status');
+const arRenderer = new THREE.WebGLRenderer({ canvas: arCanvas, alpha: true, antialias: true });
+const arScene = new THREE.Scene();
+arScene.add(new THREE.AmbientLight(0xffffff, 1.0));
+const arLight = new THREE.DirectionalLight(0xffffff, 1.0);
+arLight.position.set(0, 1, 2);
+arScene.add(arLight);
+
+const arHeadGroup = new THREE.Group();
+arHeadGroup.matrixAutoUpdate = false;
+const arFineGroup = new THREE.Group();
+arFineGroup.scale.setScalar(FINE.scale);
+arFineGroup.position.set(FINE.offsetX, FINE.offsetY, FINE.offsetZ);
+const arAlignGroup = new THREE.Group();
+arHeadGroup.add(arFineGroup);
+arFineGroup.add(arAlignGroup);
+arScene.add(arHeadGroup);
+
+let modelReady = false;
+let faceLandmarker = null;
+let stream = null;
+let running = false;
+let rafId = null;
+let arCam = null;
+
+const loader = new GLTFLoader();
+loader.load(MODEL_URL, (gltf) => {
+  const rawModel = gltf.scene;
+  const box = new THREE.Box3().setFromObject(rawModel);
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  rawModel.position.sub(center);
+  rawModel.rotation.set(ALIGN.rotX, ALIGN.rotY, ALIGN.rotZ);
+  rawModel.scale.setScalar(ALIGN.scale);
+  rawModel.position.y += ALIGN.offsetY;
+  arAlignGroup.add(rawModel);
+  modelReady = true;
+  statusEl.textContent = 'Listo — activá la cámara';
+}, undefined, (err) => {
+  showError("No se pudo cargar el modelo del armazón. Detalle: " + (err && err.message ? err.message : err));
+});
+
+async function setupFaceLandmarker() {
+  const filesetResolver = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+  );
+  faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numFaces: 1,
+    outputFacialTransformationMatrixes: true
+  });
+}
+
+async function startCamera() {
+  try {
+    if (!modelReady) { showError("El modelo todavía se está cargando, esperá un segundo e intentá de nuevo."); return; }
+    if (!faceLandmarker) {
+      statusEl.textContent = 'Cargando detección facial…';
+      await setupFaceLandmarker();
+    }
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+    arVideo.srcObject = stream;
+    await arVideo.play();
+    const w = arVideo.videoWidth || 640, h = arVideo.videoHeight || 480;
+    arCanvas.width = w; arCanvas.height = h;
+    arRenderer.setSize(w, h, false);
+    arCam = new THREE.PerspectiveCamera(HEAD_VERTICAL_FOV_DEG, w / h, 0.01, 100000);
+    arCam.position.set(0, 0, 0);
+    running = true;
+    document.getElementById('startCamBtn').style.display = 'none';
+    document.getElementById('stopCamBtn').style.display = 'inline-block';
+    statusEl.textContent = 'Detectando rostro…';
+    loopAR();
+  } catch (e) {
+    showError(
+      "No se pudo acceder a la cámara. Verificá que le diste permiso al navegador.<br><br>Detalle: " + e.message
+    );
+  }
+}
+
+function stopCamera() {
+  running = false;
+  if (rafId) cancelAnimationFrame(rafId);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  statusEl.textContent = 'Detenido.';
+  document.getElementById('startCamBtn').style.display = 'inline-block';
+  document.getElementById('stopCamBtn').style.display = 'none';
+}
+
+function loopAR() {
+  if (!running) return;
+  const now = performance.now();
+  if (faceLandmarker && arVideo.readyState >= 2) {
+    const result = faceLandmarker.detectForVideo(arVideo, now);
+    if (result.facialTransformationMatrixes && result.facialTransformationMatrixes.length > 0) {
+      arHeadGroup.matrix.fromArray(result.facialTransformationMatrixes[0].data);
+      statusEl.textContent = 'Rostro detectado ✓';
+      arRenderer.render(arScene, arCam);
+    } else {
+      statusEl.textContent = 'Buscando rostro…';
+      arRenderer.clear();
+    }
+  }
+  rafId = requestAnimationFrame(loopAR);
+}
+
+document.getElementById('startCamBtn').onclick = startCamera;
+document.getElementById('stopCamBtn').onclick = stopCamera;
+</script>
+</body>
+</html>
