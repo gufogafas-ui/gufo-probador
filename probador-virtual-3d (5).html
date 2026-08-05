@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Probador Virtual Gufo Gafas — Demo 3D</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: #14161a;
+    color: #f2f2f2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { color: #9aa0aa; margin: 0 0 16px; font-size: 14px; text-align: center; max-width: 520px; }
+  .modeTabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .modeTabs button {
+    background: #2a2d33; color: #ccc; border: none; padding: 8px 16px;
+    border-radius: 8px; font-size: 13px; cursor: pointer;
+  }
+  .modeTabs button.active { background: #e8501f; color: white; font-weight: 600; }
+  .stage {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    aspect-ratio: 4 / 3;
+    background: #1c1e22;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  }
+  video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  #arVideo, #arCanvas { transform: scaleX(-1); }
+  #status {
+    position: absolute; bottom: 10px; left: 10px;
+    background: rgba(0,0,0,0.55); padding: 6px 10px; border-radius: 8px;
+    font-size: 12px; color: #ddd;
+  }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .controls { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  button.ctrl {
+    background: #2a2d33; color: #eee; border: none; padding: 8px 14px;
+    border-radius: 8px; font-size: 13px; cursor: pointer;
+  }
+  button.primary { background: #e8501f; color: white; font-weight: 600; }
+  .group { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .group span { font-size: 11px; color: #9aa0aa; }
+  #modelUrlInput {
+    width: 320px; max-width: 60vw; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid #3a3d44; background: #1c1e22; color: #eee; font-size: 13px;
+  }
+  #errBox {
+    display: none; margin-top: 16px; background: #3a1f1f; border: 1px solid #7a3b3b;
+    padding: 12px 14px; border-radius: 10px; font-size: 13px; max-width: 560px; line-height: 1.4;
+  }
+  #hostHelp {
+    margin-top: 14px; background: #1c1e22; border: 1px solid #2e3138; padding: 12px 14px;
+    border-radius: 10px; font-size: 12.5px; color: #b8bdc6; max-width: 560px; line-height: 1.5;
+  }
+  #hostHelp b { color: #eee; }
+</style>
+</head>
+<body>
+
+<h1>👓 Probador Virtual — Demo 3D</h1>
+<p class="sub">Pegá la URL pública de un modelo .glb hosteado (ver instrucciones abajo), ajustá su orientación, y probalo con la cámara.</p>
+
+<div class="modeTabs">
+  <button id="tabPreview" class="active">1. Cargar y ajustar orientación</button>
+  <button id="tabAR">2. Probador con cámara</button>
+</div>
+
+<div class="controls" style="margin-top:0;margin-bottom:14px;">
+  <input type="text" id="modelUrlInput" placeholder="https://tuusuario.github.io/gufo-probador/models/armazon1.glb">
+  <button class="ctrl primary" id="loadModelBtn">Cargar modelo</button>
+</div>
+
+<div class="stage">
+  <div id="previewPanel" class="panel active" style="position:absolute;top:0;left:0;width:100%;height:100%;">
+    <canvas id="previewCanvas" style="width:100%;height:100%;"></canvas>
+  </div>
+  <div id="arPanel" class="panel" style="position:absolute;top:0;left:0;width:100%;height:100%;">
+    <video id="arVideo" autoplay playsinline muted></video>
+    <canvas id="arCanvas"></canvas>
+    <div id="status">Iniciando…</div>
+  </div>
+</div>
+
+<div class="controls" id="previewControls">
+  <div class="group"><span>Rotar X</span>
+    <div><button class="ctrl" id="rxMinus">−90°</button><button class="ctrl" id="rxPlus">+90°</button></div>
+  </div>
+  <div class="group"><span>Rotar Y</span>
+    <div><button class="ctrl" id="ryMinus">−90°</button><button class="ctrl" id="ryPlus">+90°</button></div>
+  </div>
+  <div class="group"><span>Rotar Z</span>
+    <div><button class="ctrl" id="rzMinus">−90°</button><button class="ctrl" id="rzPlus">+90°</button></div>
+  </div>
+  <div class="group"><span>Escala</span>
+    <div><button class="ctrl" id="scaleMinus">−</button><button class="ctrl" id="scalePlus">+</button></div>
+  </div>
+  <div class="group"><span>Altura</span>
+    <div><button class="ctrl" id="offMinus">▼</button><button class="ctrl" id="offPlus">▲</button></div>
+  </div>
+  <button class="ctrl" id="resetBtn">Reset</button>
+  <button class="ctrl primary" id="useOrientationBtn">Usar esta orientación →</button>
+</div>
+
+<div class="controls" id="arControls" style="display:none;">
+  <button class="ctrl primary" id="startCamBtn">Activar cámara</button>
+  <button class="ctrl" id="stopCamBtn">Detener</button>
+  <div class="group"><span>Escala fina</span>
+    <div><button class="ctrl" id="arScaleMinus">−</button><button class="ctrl" id="arScalePlus">+</button></div>
+  </div>
+  <div class="group"><span>Anclaje ↔ (izq/der)</span>
+    <div><button class="ctrl" id="arOffXMinus">◀</button><button class="ctrl" id="arOffXPlus">▶</button></div>
+  </div>
+  <div class="group"><span>Anclaje ↕ (altura)</span>
+    <div><button class="ctrl" id="arOffMinus">▼</button><button class="ctrl" id="arOffPlus">▲</button></div>
+  </div>
+  <div class="group"><span>Anclaje ⇅ (adelante/atrás)</span>
+    <div><button class="ctrl" id="arOffZMinus">− (atrás)</button><button class="ctrl" id="arOffZPlus">+ (adelante)</button></div>
+  </div>
+</div>
+
+<div id="hostHelp">
+  <b>Cómo alojar tu modelo .glb (una vez, gratis, con GitHub Pages):</b><br>
+  1. Creá una cuenta en github.com si no tenés.<br>
+  2. Creá un repositorio nuevo, público, ej: <code>gufo-probador</code>.<br>
+  3. Adentro, creá una carpeta <code>models</code> y subí ahí tus archivos .glb (botón "Add file → Upload files" en la web de GitHub, sin necesidad de usar la terminal).<br>
+  4. Andá a Settings → Pages → en "Branch" elegí <code>main</code> y guardá. En un par de minutos te da una URL tipo <code>https://tuusuario.github.io/gufo-probador/</code>.<br>
+  5. La URL de cada modelo queda: <code>https://tuusuario.github.io/gufo-probador/models/armazon1.glb</code> — esa es la que pegás arriba.<br>
+  6. Cuando quieras, subís también este mismo archivo HTML al repo, y listo: tenés un link web real para mandarle a una óptica, no un archivo para descargar.
+</div>
+
+<div id="errBox"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
+window.addEventListener('error', (e) => showError('Error en la página: ' + e.message));
+
+function showError(msg) {
+  const box = document.getElementById('errBox');
+  box.style.display = 'block';
+  box.innerHTML = msg;
+}
+function errBoxHide() { document.getElementById('errBox').style.display = 'none'; }
+
+// ---------- estado de alineación compartido ----------
+const align = { rotX: 0, rotY: 0, rotZ: 0, scale: 1, offsetY: 0 };
+let rawModel = null;
+let modelBaseWidth = 1;
+
+// ================= MODO 1: PREVIEW =================
+const previewCanvas = document.getElementById('previewCanvas');
+const previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, alpha: true, antialias: true });
+const previewScene = new THREE.Scene();
+const previewCamera = new THREE.PerspectiveCamera(45, 4 / 3, 0.01, 100);
+previewCamera.position.set(0, 0.15, 1.4);
+
+const previewAlignGroup = new THREE.Group();
+previewScene.add(previewAlignGroup);
+
+const orbit = new OrbitControls(previewCamera, previewCanvas);
+orbit.target.set(0, 0.1, 0);
+orbit.update();
+
+previewScene.add(new THREE.AmbientLight(0xffffff, 0.9));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
+dirLight.position.set(2, 3, 2);
+previewScene.add(dirLight);
+previewScene.add(new THREE.GridHelper(1.5, 10, 0x444444, 0x2a2a2a));
+
+function resizeRenderer(renderer, camera) {
+  const parent = renderer.domElement.parentElement;
+  const w = parent.clientWidth, h = parent.clientHeight;
+  renderer.setSize(w, h, false);
+  if (camera.isPerspectiveCamera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  return { w, h };
+}
+
+const loader = new GLTFLoader();
+
+function loadModel(url) {
+  if (!url) { showError("Pegá primero la URL pública de un archivo .glb."); return; }
+  loader.load(url, (gltf) => {
+    previewAlignGroup.clear();
+    arAlignGroup.clear();
+    rawModel = gltf.scene;
+    const box = new THREE.Box3().setFromObject(rawModel);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    modelBaseWidth = size.x || 1;
+    rawModel.position.sub(center);
+    previewAlignGroup.add(rawModel);
+    errBoxHide();
+  }, undefined, (err) => {
+    showError(
+      "No se pudo cargar el modelo desde esa URL. Motivos posibles: la URL no es pública, no es un link directo al archivo .glb, " +
+      "o el servidor no permite acceso desde otros dominios (CORS). Con GitHub Pages esto no debería pasar si el link es correcto." +
+      "<br><br>Detalle técnico: " + (err && err.message ? err.message : err)
+    );
+  });
+}
+
+document.getElementById('loadModelBtn').onclick = () => loadModel(document.getElementById('modelUrlInput').value.trim());
+
+function applyAlign(group) {
+  group.rotation.set(align.rotX, align.rotY, align.rotZ);
+  group.scale.setScalar(align.scale);
+  group.position.y = align.offsetY;
+}
+
+function animatePreview() {
+  requestAnimationFrame(animatePreview);
+  if (document.getElementById('previewPanel').classList.contains('active')) {
+    applyAlign(previewAlignGroup);
+    orbit.update();
+    resizeRenderer(previewRenderer, previewCamera);
+    previewRenderer.render(previewScene, previewCamera);
+  }
+}
+animatePreview();
+
+const STEP = Math.PI / 2;
+document.getElementById('rxPlus').onclick = () => align.rotX += STEP;
+document.getElementById('rxMinus').onclick = () => align.rotX -= STEP;
+document.getElementById('ryPlus').onclick = () => align.rotY += STEP;
+document.getElementById('ryMinus').onclick = () => align.rotY -= STEP;
+document.getElementById('rzPlus').onclick = () => align.rotZ += STEP;
+document.getElementById('rzMinus').onclick = () => align.rotZ -= STEP;
+document.getElementById('scalePlus').onclick = () => align.scale *= 1.15;
+document.getElementById('scaleMinus').onclick = () => align.scale /= 1.15;
+document.getElementById('offPlus').onclick = () => align.offsetY += 0.02;
+document.getElementById('offMinus').onclick = () => align.offsetY -= 0.02;
+document.getElementById('resetBtn').onclick = () => { align.rotX = align.rotY = align.rotZ = 0; align.scale = 1; align.offsetY = 0; };
+
+// ================= TABS =================
+const tabPreview = document.getElementById('tabPreview');
+const tabAR = document.getElementById('tabAR');
+const previewPanel = document.getElementById('previewPanel');
+const arPanel = document.getElementById('arPanel');
+const previewControls = document.getElementById('previewControls');
+const arControls = document.getElementById('arControls');
+
+function showPreview() {
+  tabPreview.classList.add('active'); tabAR.classList.remove('active');
+  previewPanel.classList.add('active'); arPanel.classList.remove('active');
+  previewControls.style.display = 'flex'; arControls.style.display = 'none';
+}
+function showAR() {
+  tabAR.classList.add('active'); tabPreview.classList.remove('active');
+  arPanel.classList.add('active'); previewPanel.classList.remove('active');
+  arControls.style.display = 'flex'; previewControls.style.display = 'none';
+}
+tabPreview.onclick = showPreview;
+tabAR.onclick = showAR;
+document.getElementById('useOrientationBtn').onclick = () => { showAR(); };
+
+// ================= MODO 2: AR con cámara (pose 3D completa) =================
+const arVideo = document.getElementById('arVideo');
+const arCanvas = document.getElementById('arCanvas');
+const statusEl = document.getElementById('status');
+const arRenderer = new THREE.WebGLRenderer({ canvas: arCanvas, alpha: true, antialias: true });
+const arScene = new THREE.Scene();
+arScene.add(new THREE.AmbientLight(0xffffff, 1.0));
+const arLight = new THREE.DirectionalLight(0xffffff, 1.0);
+arLight.position.set(0, 1, 2);
+arScene.add(arLight);
+
+const arHeadGroup = new THREE.Group();
+arHeadGroup.matrixAutoUpdate = false;
+const arFineGroup = new THREE.Group();
+const arAlignGroup = new THREE.Group();
+arHeadGroup.add(arFineGroup);
+arFineGroup.add(arAlignGroup);
+arScene.add(arHeadGroup);
+
+let arCam = null;
+let faceLandmarker = null;
+let stream = null;
+let running = false;
+let rafId = null;
+const arFineTune = { scale: 1, offsetX: 0, offsetY: 0, offsetZ: 0 };
+const HEAD_VERTICAL_FOV_DEG = 63;
+
+async function setupFaceLandmarker() {
+  const filesetResolver = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+  );
+  faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numFaces: 1,
+    outputFacialTransformationMatrixes: true
+  });
+}
+
+async function startCamera() {
+  try {
+    if (!rawModel) { showError("Primero cargá un modelo .glb en el paso 1."); return; }
+    if (!faceLandmarker) {
+      statusEl.textContent = 'Cargando modelo de detección facial…';
+      await setupFaceLandmarker();
+    }
+    if (arAlignGroup.children.length === 0) {
+      const clone = rawModel.clone(true);
+      clone.rotation.set(align.rotX, align.rotY, align.rotZ);
+      clone.scale.setScalar(align.scale);
+      clone.position.y = align.offsetY;
+      arAlignGroup.add(clone);
+    }
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+    arVideo.srcObject = stream;
+    await arVideo.play();
+    const w = arVideo.videoWidth || 640, h = arVideo.videoHeight || 480;
+    arCanvas.width = w; arCanvas.height = h;
+    arRenderer.setSize(w, h, false);
+    arCam = new THREE.PerspectiveCamera(HEAD_VERTICAL_FOV_DEG, w / h, 0.01, 100000);
+    arCam.position.set(0, 0, 0);
+    running = true;
+    statusEl.textContent = 'Detectando rostro…';
+    loopAR();
+  } catch (e) {
+    showError(
+      "No se pudo acceder a la cámara o cargar el modelo. Si estás en la vista previa de Claude, " +
+      "descargá el archivo y abrilo directamente en tu navegador (Chrome/Edge).<br><br>Detalle: " + e.message
+    );
+  }
+}
+
+function stopCamera() {
+  running = false;
+  if (rafId) cancelAnimationFrame(rafId);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  statusEl.textContent = 'Detenido.';
+}
+
+function loopAR() {
+  if (!running) return;
+  const now = performance.now();
+  if (faceLandmarker && arVideo.readyState >= 2) {
+    const result = faceLandmarker.detectForVideo(arVideo, now);
+    if (result.facialTransformationMatrixes && result.facialTransformationMatrixes.length > 0) {
+      const matrixData = result.facialTransformationMatrixes[0].data;
+      arHeadGroup.matrix.fromArray(matrixData);
+      arFineGroup.scale.setScalar(arFineTune.scale);
+      arFineGroup.position.set(arFineTune.offsetX, arFineTune.offsetY, arFineTune.offsetZ);
+      statusEl.textContent = 'Rostro detectado ✓ (con pose 3D)';
+      arRenderer.render(arScene, arCam);
+    } else {
+      statusEl.textContent = 'Buscando rostro…';
+      arRenderer.clear();
+    }
+  }
+  rafId = requestAnimationFrame(loopAR);
+}
+
+document.getElementById('startCamBtn').onclick = startCamera;
+document.getElementById('stopCamBtn').onclick = stopCamera;
+document.getElementById('arScalePlus').onclick = () => arFineTune.scale *= 1.1;
+document.getElementById('arScaleMinus').onclick = () => arFineTune.scale /= 1.1;
+document.getElementById('arOffPlus').onclick = () => arFineTune.offsetY += 0.05;
+document.getElementById('arOffMinus').onclick = () => arFineTune.offsetY -= 0.05;
+document.getElementById('arOffXPlus').onclick = () => arFineTune.offsetX += 0.05;
+document.getElementById('arOffXMinus').onclick = () => arFineTune.offsetX -= 0.05;
+document.getElementById('arOffZPlus').onclick = () => arFineTune.offsetZ += 0.05;
+document.getElementById('arOffZMinus').onclick = () => arFineTune.offsetZ -= 0.05;
+</script>
+</body>
+</html>
