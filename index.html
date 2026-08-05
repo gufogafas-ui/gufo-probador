@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -126,7 +127,10 @@
   <div class="group"><span>Anclaje ⇅ (adelante/atrás)</span>
     <div><button class="ctrl" id="arOffZMinus">− (atrás)</button><button class="ctrl" id="arOffZPlus">+ (adelante)</button></div>
   </div>
+  <button class="ctrl primary" id="exportBtn">📋 Exportar ajustes</button>
 </div>
+
+<textarea id="exportBox" readonly style="display:none;width:100%;max-width:560px;margin-top:10px;height:70px;background:#1c1e22;color:#9be89b;border:1px solid #2e3138;border-radius:8px;padding:8px;font-family:monospace;font-size:12px;"></textarea>
 
 <div id="hostHelp">
   <b>Cómo alojar tu modelo .glb (una vez, gratis, con GitHub Pages):</b><br>
@@ -388,6 +392,18 @@ document.getElementById('arOffXPlus').onclick = () => arFineTune.offsetX += 0.05
 document.getElementById('arOffXMinus').onclick = () => arFineTune.offsetX -= 0.05;
 document.getElementById('arOffZPlus').onclick = () => arFineTune.offsetZ += 0.05;
 document.getElementById('arOffZMinus').onclick = () => arFineTune.offsetZ -= 0.05;
+
+document.getElementById('exportBtn').onclick = () => {
+  const data = {
+    modelUrl: document.getElementById('modelUrlInput').value.trim(),
+    align: { rotX: align.rotX, rotY: align.rotY, rotZ: align.rotZ, scale: align.scale, offsetY: align.offsetY },
+    fineTune: { scale: arFineTune.scale, offsetX: arFineTune.offsetX, offsetY: arFineTune.offsetY, offsetZ: arFineTune.offsetZ }
+  };
+  const box = document.getElementById('exportBox');
+  box.style.display = 'block';
+  box.value = JSON.stringify(data, null, 2);
+  box.select();
+};
 </script>
 </body>
 </html>
