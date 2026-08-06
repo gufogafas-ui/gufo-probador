@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -116,6 +115,13 @@ let stream = null;
 let running = false;
 let rafId = null;
 let arCam = null;
+const SMOOTHING = 0.35;
+let smoothPos = new THREE.Vector3();
+let smoothQuat = new THREE.Quaternion();
+let smoothScale = new THREE.Vector3(1, 1, 1);
+let smoothInit = false;
+const _tmpPos = new THREE.Vector3(), _tmpQuat = new THREE.Quaternion(), _tmpScale = new THREE.Vector3();
+const _tmpMatrix = new THREE.Matrix4();
 
 const loader = new GLTFLoader();
 loader.load(MODEL_URL, (gltf) => {
@@ -191,12 +197,23 @@ function loopAR() {
   if (faceLandmarker && arVideo.readyState >= 2) {
     const result = faceLandmarker.detectForVideo(arVideo, now);
     if (result.facialTransformationMatrixes && result.facialTransformationMatrixes.length > 0) {
-      arHeadGroup.matrix.fromArray(result.facialTransformationMatrixes[0].data);
+      _tmpMatrix.fromArray(result.facialTransformationMatrixes[0].data);
+      _tmpMatrix.decompose(_tmpPos, _tmpQuat, _tmpScale);
+      if (!smoothInit) {
+        smoothPos.copy(_tmpPos); smoothQuat.copy(_tmpQuat); smoothScale.copy(_tmpScale);
+        smoothInit = true;
+      } else {
+        smoothPos.lerp(_tmpPos, SMOOTHING);
+        smoothQuat.slerp(_tmpQuat, SMOOTHING);
+        smoothScale.lerp(_tmpScale, SMOOTHING);
+      }
+      arHeadGroup.matrix.compose(smoothPos, smoothQuat, smoothScale);
       statusEl.textContent = 'Rostro detectado ✓';
       arRenderer.render(arScene, arCam);
     } else {
       statusEl.textContent = 'Buscando rostro…';
       arRenderer.clear();
+      smoothInit = false;
     }
   }
   rafId = requestAnimationFrame(loopAR);
