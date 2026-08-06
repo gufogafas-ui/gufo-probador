@@ -88,6 +88,7 @@
     <video id="arVideo" autoplay playsinline muted></video>
     <canvas id="arCanvas"></canvas>
     <div id="status">Iniciando…</div>
+    <div id="liveVals" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.55);padding:6px 10px;border-radius:8px;font-size:11px;color:#9be89b;font-family:monospace;text-align:right;"></div>
   </div>
 </div>
 
@@ -390,6 +391,8 @@ function loopAR() {
       arHeadGroup.matrix.compose(smoothPos, smoothQuat, smoothScale);
       arFineGroup.scale.setScalar(arFineTune.scale);
       arFineGroup.position.set(arFineTune.offsetX, arFineTune.offsetY, arFineTune.offsetZ);
+      const lv = document.getElementById('liveVals');
+      if (lv) lv.textContent = `escala ${arFineTune.scale.toFixed(2)} | X ${arFineTune.offsetX.toFixed(2)} | Y ${arFineTune.offsetY.toFixed(2)} | Z ${arFineTune.offsetZ.toFixed(2)}`;
       statusEl.textContent = 'Rostro detectado ✓ (con pose 3D)';
       arRenderer.render(arScene, arCam);
     } else {
