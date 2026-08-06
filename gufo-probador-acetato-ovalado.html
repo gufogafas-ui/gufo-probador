@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -79,7 +80,7 @@ import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@m
 // ---------- valores calibrados para este armazón (Acetato ovalado - Miu Miu) ----------
 const MODEL_URL = "https://raw.githubusercontent.com/gufogafas-ui/gufo-probador/main/round_glasses_3d_model.glb";
 const ALIGN = { rotX: 0, rotY: 0, rotZ: 0, scale: 1, offsetY: 0 };
-const FINE = { scale: 23.22515441988786, offsetX: 0.44999999999999996, offsetY: 0.49999999999999994, offsetZ: -1.9500000000000008 };
+const FINE = { scale: 25.54766986187665, offsetX: 0.2, offsetY: 0.6, offsetZ: -2.6499999999999986 };
 const HEAD_VERTICAL_FOV_DEG = 63;
 
 window.addEventListener('error', (e) => showError('Error en la página: ' + e.message));
@@ -158,19 +159,11 @@ async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
     arVideo.srcObject = stream;
     await arVideo.play();
-    function syncCanvasToStage() {
-      const rect = arCanvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = Math.round(rect.width * dpr), h = Math.round(rect.height * dpr);
-      arCanvas.width = w; arCanvas.height = h;
-      arRenderer.setSize(w, h, false);
-      if (arCam) { arCam.aspect = w / h; arCam.updateProjectionMatrix(); }
-      return { w, h };
-    }
-    const { w, h } = syncCanvasToStage();
+    const w = arVideo.videoWidth || 640, h = arVideo.videoHeight || 480;
+    arCanvas.width = w; arCanvas.height = h;
+    arRenderer.setSize(w, h, false);
     arCam = new THREE.PerspectiveCamera(HEAD_VERTICAL_FOV_DEG, w / h, 0.01, 100000);
     arCam.position.set(0, 0, 0);
-    window.addEventListener('resize', syncCanvasToStage);
     running = true;
     document.getElementById('startCamBtn').style.display = 'none';
     document.getElementById('stopCamBtn').style.display = 'inline-block';
