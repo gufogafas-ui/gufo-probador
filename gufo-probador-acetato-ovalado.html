@@ -127,7 +127,8 @@ const _tmpPos = new THREE.Vector3(), _tmpQuat = new THREE.Quaternion(), _tmpScal
 const _tmpMatrix = new THREE.Matrix4();
 const _tmpEuler = new THREE.Euler();
 const _dampedQuat = new THREE.Quaternion();
-const PITCH_DAMPING = 0.35; // 0 = ignora el "mirar arriba/abajo" por completo, 1 = sigue el movimiento real sin amortiguar
+const PITCH_DAMPING_DOWN = 0.35; // mirar hacia abajo — ya confirmado que se ve bien así
+const PITCH_DAMPING_UP = 0.12;   // mirar hacia arriba — más frenado, porque ahí se veían las patillas
 
 const loader = new GLTFLoader();
 loader.load(MODEL_URL, (gltf) => {
@@ -214,7 +215,7 @@ function loopAR() {
         smoothScale.lerp(_tmpScale, SMOOTHING);
       }
       _tmpEuler.setFromQuaternion(smoothQuat, 'YXZ');
-      _tmpEuler.x *= PITCH_DAMPING;
+      _tmpEuler.x *= (_tmpEuler.x < 0 ? PITCH_DAMPING_UP : PITCH_DAMPING_DOWN);
       _dampedQuat.setFromEuler(_tmpEuler);
       arHeadGroup.matrix.compose(smoothPos, _dampedQuat, smoothScale);
       statusEl.textContent = 'Rostro detectado ✓';
