@@ -128,7 +128,7 @@ const _tmpMatrix = new THREE.Matrix4();
 const _tmpEuler = new THREE.Euler();
 const _dampedQuat = new THREE.Quaternion();
 const PITCH_DAMPING_DOWN = 0.35; // mirar hacia abajo — ya confirmado que se ve bien así
-const PITCH_DAMPING_UP = 0.12;   // mirar hacia arriba — más frenado, porque ahí se veían las patillas
+const PITCH_DAMPING_UP = 0.03;   // mirar hacia arriba — más frenado, porque ahí se veían las patillas
 
 const loader = new GLTFLoader();
 loader.load(MODEL_URL, (gltf) => {
